@@ -13,7 +13,7 @@ import CacheUtil from '../../utils/caches/CacheUtil';
 
 type PlaceId = string;
 export default class DirectionService {
-  static async getBestDirection(): Promise<DirectionsResponseData> {
+  static async getBestDirection(): Promise<DirectionsResponseData | null> {
     const cacheValue = CacheUtil.getCacheValueByKey<DirectionsResponseData>('some-key');
     if (cacheValue) {
       return cacheValue;
@@ -23,12 +23,13 @@ export default class DirectionService {
 
     const scgPlaceId = await DirectionService.findPlaceIdFromString('SCG Building, Bangkok', client, key);
     const ctwPlaceId = await DirectionService.findPlaceIdFromString('Central World, Bangkok', client, key);
-    console.log(scgPlaceId, ctwPlaceId);
+
     const latlongSCG = await DirectionService.findLocationFromPlaceId(scgPlaceId, client, key);
     const latlongCTW = await DirectionService.findLocationFromPlaceId(ctwPlaceId, client, key);
 
-    const direction: DirectionsResponseData = await DirectionService
+    const direction: DirectionsResponseData | null = await DirectionService
       .findBestDirectionFromTo(client, key, latlongSCG, latlongCTW);
+    if (!direction) return null;
     CacheUtil.setCacheValue<DirectionsResponseData>('some-key', direction);
     return direction;
   }
@@ -37,7 +38,7 @@ export default class DirectionService {
     placeStr: string,
     client: Client,
     key: string,
-  ): Promise<PlaceId> {
+  ): Promise<PlaceId | null> {
     const req: FindPlaceFromTextRequest = {
       params: {
         input: placeStr,
@@ -50,15 +51,20 @@ export default class DirectionService {
         const placeId = res.data.candidates[0].place_id;
         if (placeId) return placeId;
         console.log(`Cannot find place id for req: ${req}, res: ${res}`);
-        return '';
+        return null;
+      })
+      .catch((err) => {
+        console.log(err);
+        return null;
       });
   }
 
   static async findLocationFromPlaceId(
-    placeId: PlaceId,
+    placeId: PlaceId | null,
     client: Client,
     key: string,
   ): Promise<LatLngLiteral | null> {
+    if (!placeId) return null;
     const req: PlaceDetailsRequest = {
       params: {
         place_id: placeId,
@@ -71,6 +77,10 @@ export default class DirectionService {
         if (latlng) return latlng;
         console.log(`Cannot find location from req ${req}, res: ${res}`);
         return null;
+      })
+      .catch((err) => {
+        console.log(err);
+        return null;
       });
   }
 
@@ -78,13 +88,14 @@ export default class DirectionService {
     client: Client,
     key: string,
     from: LatLngLiteral | null,
-    to?: LatLngLiteral | null,
+    to: LatLngLiteral | null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): Promise<any> {
+    if (!from || !to) return null;
     const req: DirectionsRequest = {
       params: {
-        origin: from || '',
-        destination: to || '',
+        origin: from,
+        destination: to,
         mode: TravelMode.driving,
         key,
       },
@@ -95,6 +106,10 @@ export default class DirectionService {
       if (data) return data;
       console.log(`Cannot find direction from req: ${req}, res: ${res}`);
       return null;
-    });
+    })
+      .catch((err) => {
+        console.log(err);
+        return null;
+      });
   }
 }
